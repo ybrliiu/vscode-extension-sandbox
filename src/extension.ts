@@ -1,13 +1,8 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { exec } from 'child_process';
 
-// this method is called when your extension is activated
-// your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "practice-2" is now active!');
 
 	// The command has been defined in the package.json file
@@ -20,7 +15,7 @@ export function activate(context: vscode.ExtensionContext) {
 		vscode.window.showInformationMessage('捏造トラップは最高');
 	});
 
-	const provider1 = vscode.languages.registerCompletionItemProvider('plaintext', {
+	const provider1 = vscode.languages.registerCompletionItemProvider('perl', {
 
 		provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
 
@@ -53,6 +48,7 @@ export function activate(context: vscode.ExtensionContext) {
 			// return all completion items as array
 			return [
 				simpleCompletion,
+				new vscode.CompletionItem('Hello Hello Hello'),
 				snippetCompletion,
 				commitCharacterCompletion,
 				commandCompletion
@@ -61,7 +57,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	const provider2 = vscode.languages.registerCompletionItemProvider(
-		'plaintext',
+		'perl',
 		{
 			provideCompletionItems(document: vscode.TextDocument, position: vscode.Position) {
 
@@ -82,7 +78,59 @@ export function activate(context: vscode.ExtensionContext) {
 		'.' // triggered whenever a '.' is being typed
 	);
 
-	context.subscriptions.push(disposable, provider1, provider2);
+	const autoUse = vscode.languages.registerCompletionItemProvider(
+		'perl',
+		{
+			provideCompletionItems(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, context: vscode.CompletionContext) {
+
+				const line = document.lineAt(position).text.substr(0, position.character);
+				const word = (() => {
+					const words = line.split(' ');
+					return words[words.length - 1];
+				})();
+
+				const matches = word.match(/^(((\w+(::|'))*)\w+)$/);
+				if (matches === null) {
+					return undefined;
+				}
+
+				const perlCode = 'use v5.10;'
+					+ 'use strict;'
+					+ 'use warnings;'
+					+ 'use Module::Load qw( load );'
+					+ 'my $module = $ARGV[0];'
+					+ 'eval { load $module };'
+					+ 'print do { if ($@) {'
+						+ "no strict q{refs};"
+						+ '!!scalar(%{ qq!${module}::! });'
+					+ '}'
+					+ 'else {'
+						+ '1;'
+				  	+ '}'
+					+ '}';
+
+				let isLoadableModule = false;
+				exec(`perl -e '${perlCode}' ${word}`, (error, stdout, _stderr) => {
+					if (error !== null) {
+						console.log(error);
+					} else {
+						if (stdout === '1') {
+							isLoadableModule = true;
+						}
+					}
+				});
+
+				const commitCharacterCompletion = new vscode.CompletionItem('Auto use');
+				commitCharacterCompletion.commitCharacters = ['-'];
+
+				return [
+					commitCharacterCompletion,
+				];
+			}
+		},
+	);
+
+	context.subscriptions.push(disposable, provider1, provider2, autoUse);
 }
 
 // this method is called when your extension is deactivated
